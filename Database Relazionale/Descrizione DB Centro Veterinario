@@ -1,0 +1,55 @@
+Progetto Database SQL: Centro Veterinario
+
+Introduzione
+Il presente documento descrive il lavoro svolto per la progettazione, l'implementazione e la validazione di un sistema informativo relazionale a supporto della gestione di un centro veterinario. L'obiettivo del progetto è consentire la gestione anagrafica di clienti e animali, la registrazione delle visite mediche e la ricostruzione dello storico clinico di ciascun animale, oltre a fornire strumenti di analisi sull'attività del centro.
+
+1. Modello Concettuale
+La progettazione è partita dall'analisi dei requisiti espressi dal centro veterinario, da cui sono state individuate quattro entità principali e le relazioni che le collegano.
+Entità e attributi principali:
+•	Cliente: Codice Cliente (PK), Nome, Cognome, Indirizzo, Telefono, Email;
+•	Animale: Codice Animale (PK), Nome, Specie, Razza, Data di Nascita, Data Nascita Stimata, Sesso, Attivo;
+•	Veterinario: Codice Veterinario (PK), Nome, Cognome, Specializzazione, Attivo;
+•	Visita: Codice Visita (PK), Data, Motivo, Diagnosi, Costo, Terapia.
+Due attributi meritano una nota di progettazione specifica: Data Nascita Stimata qualifica l'attendibilità della data di nascita, per gestire animali privi di documentazione anagrafica certa (generalmente dovuto ad adozioni in condizioni di randagismo); Attivo (su Animale e Veterinario) abilita la cancellazione logica anziché fisica dei record, preservando l'integrità dello storico clinico.
+Relazioni e cardinalità:
+•	Possiede (Cliente — Animale): (1,N) — (1,1)
+•	Riguarda (Animale — Visita): (0,N) — (1,1)
+•	Esegue (Veterinario — Visita): (0,N) — (1,1)
+Le relazioni Riguarda ed Esegue collegano l'entità Visita, punto di incrocio tra animale e veterinario in un dato momento: questa scelta permette contemporaneamente di ricostruire lo storico clinico di un animale e di calcolare il carico di lavoro di ciascun veterinario. 
+
+2. Implementazione SQL 
+L'infrastruttura del database è stata sviluppata in ambiente MySQL tramite il software DBeaver (centro_veterinario_schema.sql).
+Il popolamento automatizzato è stato effettuato con il LLM Claude, calibrato per produrre volumi realistici e distribuzioni non banali (centro_veterinario_popolamento.sql):
+-	100 Clienti, con copertura garantita: l'algoritmo di assegnazione assicura che ogni cliente possieda almeno un animale;
+-	220 Animali, con circa 20% di record a data di nascita stimata e circa 5% marcati come non più attivi.
+-	15 Veterinari, di cui 2 con storiche visite antecedente alla disattivazione;
+-	500 Visite, distribuite nel tempo in coerenza con la data di nascita dell'animale e lo stato del veterinario assegnato.
+
+Logiche dei Trigger
+Trigger BEFORE INSERT/UPDATE (Coerenza Temporale): intercetta la transazione prima della scrittura fisica, verificando che la data della visita non preceda la data di nascita dell'animale (controllo saltato in assenza del dato).
+Trigger Anti-Assegnazione Impropria: blocca l'inserimento di nuove visite verso un veterinario segnato come non più attivo, senza impatto retroattivo sulle visite già registrate.
+
+3. Vincoli e Integrità dei Dati
+Il sistema impone l'integrità dei dati su più livelli. 
+•	A livello dichiarativo: chiave primaria surrogata su ogni entità, chiave alternativa UNIQUE sull'email del cliente, vincoli NOT NULL sugli attributi obbligatori, CHECK sul dominio del sesso e sulla non negatività del costo, e foreign key con ON DELETE RESTRICT per impedire cancellazioni che comprometterebbero lo storico.
+•	A livello procedurale, tre trigger coprono regole che coinvolgono più tabelle: verifica che la data di una visita non preceda la nascita dell'animale (in inserimento e in aggiornamento), e blocco dell'assegnazione di nuove visite a un veterinario non più attivo, senza impatto sulle visite già registrate.
+•	La cancellazione logica (attributo Attivo) preserva la ricostruibilità dello storico clinico anche a fronte del decesso di un animale o della cessazione del rapporto con un veterinario. È stato inoltre predisposto uno script di verifica dedicato (centro_veterinario_verifica_integrita.sql), con dieci controlli di integrità referenziale, unicità, coerenza delle date e dei conteggi aggregati, eseguito con esito positivo sul dataset di prova.
+
+4. Query di Analisi
+Nel corso dello sviluppo sono state formulate tredici query SQL di verifica e analisi, pensate per coprire in modo esaustivo gli scenari gestionali del centro. Questo set completo costituisce il file di test SQL (centro_veterinario_query_miste.sql) del progetto, eseguibile direttamente su un client relazionale.
+Di queste tredici, sei query sono state selezionate e integrate nello strato applicativo Python (centro_veterinario interazione python.py), in quanto rappresentative delle esigenze operative ricorrenti del centro e sufficienti a dimostrare l'intero flusso di interazione. Ciascuna è stata incapsulata in una funzione indipendente, richiamabile singolarmente da riga di comando o da un ambiente di sviluppo, senza dipendenze dalle altre.
+1)	Storico clinico di un animale: Ricostruisce in ordine cronologico tutte le visite di un singolo animale, arricchite con nome dell'animale, proprietario associato e veterinario che ha eseguito ciascuna prestazione. Risponde direttamente al requisito di tracciabilità clinica per singolo soggetto.
+2)	Numero di visite per veterinario: Aggrega le visite per ciascun professionista, includendo lo stato attivo/non attivo. 
+3)	Animali di un determinato cliente: Elenca gli animali posseduti da un cliente specifico, con nome e cognome del proprietario in intestazione. Consente di recuperare rapidamente l'anagrafica di ogni animale legata a un cliente in visita.
+4)	Clienti con più di un animale: Permette di verificare quali clienti posseggono il maggior numero di animali.
+5)	Spesa totale per cliente: Aggrega il costo di tutte le visite sostenute da ciascun cliente, include anche i clienti a spesa nulla (nessuna visita ancora registrata). Permette di osservare la performance economica del centro.
+6)	Costo medio delle visite per specializzazione: Raggruppa il costo medio delle prestazioni per specializzazione del veterinario, offrendo una prima lettura di business intelligence su quali competenze professionali generano il valore economico maggiore per singola visita.
+
+Le restanti sette query del set completo coprono controlli aggiuntivi quali gli animali privi di visite, l'ultima visita registrata per soggetto, il veterinario con il maggior numero di prestazioni in assoluto, la distribuzione delle visite per specie animale e la verifica esplicita dello storico dei veterinari non più attivi: un margine di estensione naturale per l'applicativo, qualora si volesse ampliare il set di funzioni esposte.
+
+5. Conclusione
+Il progetto ha portato alla realizzazione di un sistema informativo completo per la gestione di un centro veterinario, dalla progettazione concettuale del modello dei dati fino alla verifica sistematica della sua affidabilità su un dataset realistico.
+Le scelte progettuali riflettono esigenze concrete del dominio veterinario: la gestione dello stato di animali e veterinari garantisce che eventi come il decesso di un animale o la cessazione del rapporto con un professionista non compromettano la consultabilità dello storico clinico associato. La protezione dei dati anagrafici da cancellazioni accidentali assicura che le informazioni cliniche non vadano mai perse come conseguenza indiretta di un'altra operazione. Il riconoscimento esplicito dell'incertezza sulla data di nascita di un animale, infine, tiene conto di una realtà frequente nella pratica veterinaria, senza per questo rinunciare a un dato utilizzabile ai fini clinici.
+Il sistema è stato validato sia nella sua struttura, che nel suo comportamento operativo: le regole di coerenza temporale e professionale sono state messe alla prova con scenari volutamente scorretti, la qualità complessiva dei dati è stata verificata con esito positivo, e le interrogazioni di analisi sono state controllate anche sui casi limite, come clienti privi di animali o animali privi di visite.
+Ne risulta una base informativa affidabile, pronta per essere collegata a un'applicazione client, con naturali sviluppi futuri nella gestione strutturata delle terapie e nell'introduzione di promemoria per le visite di controllo.
+
