@@ -1,0 +1,181 @@
+----------------------------------------------------------------------------------------------------------
+-- Creazione di vincoli e indici
+CREATE CONSTRAINT corso_id IF NOT EXISTS FOR (c:Corso) REQUIRE c.id IS UNIQUE;
+CREATE CONSTRAINT docente_id IF NOT EXISTS FOR (d:Docente) REQUIRE d.id IS UNIQUE;
+CREATE CONSTRAINT studente_matricola IF NOT EXISTS FOR (s:Studente) REQUIRE s.matricola IS UNIQUE;
+CREATE CONSTRAINT argomento_id IF NOT EXISTS FOR (a:Argomento) REQUIRE a.id IS UNIQUE;
+CREATE CONSTRAINT certificato_id IF NOT EXISTS FOR (cert:Certificato) REQUIRE cert.id IS UNIQUE;
+
+CREATE INDEX corso_categoria IF NOT EXISTS FOR (c:Corso) ON (c.categoria);
+CREATE INDEX studente_email IF NOT EXISTS FOR (s:Studente) ON (s.email);
+
+
+-------------------------------------------------------------------------------------------------------
+-– Creazione dei nodi
+
+--Corsi (40)
+WITH ["Database","Programmazione","Data Science","Cloud","Sicurezza","Web Development","Project Management"] AS categorie,
+     ["Base","Intermedio","Avanzato"] AS livelli
+UNWIND range(1,40) AS i
+WITH i, categorie[i % size(categorie)] AS categoria, livelli[i % size(livelli)] AS livello
+CREATE (:Corso {
+  id: "c" + toString(i),
+  titolo: categoria + " - Modulo " + toString(i),
+  livello: livello,
+  durata_ore: 10 + toInteger(rand()*50),
+  categoria: categoria
+});
+
+--Docenti (30)
+WITH ["Mario","Luca","Giulia","Anna","Marco","Elena","Paolo","Chiara","Davide","Francesca",
+      "Simone","Valentina","Andrea","Sara","Matteo"] AS nomi,
+     ["Rossi","Bianchi","Verdi","Ferrari","Russo","Colombo","Ricci","Marino","Greco","Bruno",
+      "Gallo","Conti","De Luca","Mancini","Costa"] AS cognomi,
+     ["Database","Programmazione","Data Science","Cloud","Sicurezza","Web Development","Project Management"] AS categorie
+UNWIND range(1,30) AS i
+WITH i, nomi[i % size(nomi)] AS nome, cognomi[(i*3) % size(cognomi)] AS cognome,
+     categorie[i % size(categorie)] AS specializzazione
+CREATE (:Docente {
+  id: "d" + toString(i),
+  nome: nome,
+  cognome: cognome,
+  email: toLower(nome) + "." + toLower(cognome) + toString(i) + "@example.com",
+  specializzazione: specializzazione
+});
+
+-- Studenti (200) 
+WITH ["Mario","Luca","Giulia","Anna","Marco","Elena","Paolo","Chiara","Davide","Francesca",
+      "Simone","Valentina","Andrea","Sara","Matteo","Federica","Alessandro","Martina","Riccardo","Giorgia"] AS nomi,
+     ["Rossi","Bianchi","Verdi","Ferrari","Russo","Colombo","Ricci","Marino","Greco","Bruno",
+      "Gallo","Conti","De Luca","Mancini","Costa","Fontana","Serra","Barbieri","Rinaldi","Villa"] AS cognomi
+UNWIND range(1,200) AS i
+WITH i, nomi[i % size(nomi)] AS nome, cognomi[(i*7) % size(cognomi)] AS cognome,
+     2022 + (i % 4) AS annoIscrizione
+WITH i, nome, cognome, annoIscrizione,
+     right("0000" + toString(i), 4) AS numProgressivo
+CREATE (:Studente {
+  matricola: "STU" + toString(annoIscrizione) + numProgressivo,
+  nome: nome,
+  cognome: cognome,
+  email: toLower(nome) + "." + toLower(cognome) + toString(i) + "@example.com",
+  data_iscrizione: date({year: annoIscrizione}) + duration({days: toInteger(rand()*365)})
+});
+
+-- Argomenti (30)
+UNWIND [
+  {id:"a1",  nome:"Modello a grafo"},
+  {id:"a2",  nome:"Query Cypher"},
+  {id:"a3",  nome:"SQL Avanzato"},
+  {id:"a4",  nome:"Progettazione Schema Database"},
+  {id:"a5",  nome:"Variabili e Strutture Dati"},
+  {id:"a6",  nome:"Programmazione Orientata agli Oggetti"},
+  {id:"a7",  nome:"Funzioni e Moduli"},
+  {id:"a8",  nome:"Gestione degli Errori"},
+  {id:"a9",  nome:"Testing del Codice"},
+  {id:"a10", nome:"Statistica di Base"},
+  {id:"a11", nome:"Analisi Esplorativa dei Dati"},
+  {id:"a12", nome:"Machine Learning Supervisionato"},
+  {id:"a13", nome:"Reti Neurali"},
+  {id:"a14", nome:"Elaborazione del Linguaggio Naturale"},
+  {id:"a15", nome:"Virtualizzazione"},
+  {id:"a16", nome:"Servizi Cloud AWS"},
+  {id:"a17", nome:"Containerizzazione con Docker"},
+  {id:"a18", nome:"Orchestrazione con Kubernetes"},
+  {id:"a19", nome:"Crittografia di Base"},
+  {id:"a20", nome:"Penetration Testing"},
+  {id:"a21", nome:"Sicurezza delle Reti"},
+  {id:"a22", nome:"Gestione delle Vulnerabilità"},
+  {id:"a23", nome:"HTML e CSS"},
+  {id:"a24", nome:"Javascript Base"},
+  {id:"a25", nome:"Framework Frontend"},
+  {id:"a26", nome:"API REST"},
+  {id:"a27", nome:"Metodologie Agile"},
+  {id:"a28", nome:"Scrum"},
+  {id:"a29", nome:"Gestione del Rischio"},
+  {id:"a30", nome:"Comunicazione di Team"}
+] AS arg
+CREATE (:Argomento {id: arg.id, nome: arg.nome});
+
+
+----------------------------------------------------------------------------------------
+-- Creazione delle relazioni
+
+
+#(:Docente)-[:TIENE {dal: date}]->(:Corso)
+#(:Studente)-[:ISCRITTO_A {data_iscrizione: date, stato: string}]->(:Corso)
+#(:Studente)-[:OTTIENE]->(:Certificato)
+#(:Certificato)-[:CERTIFICA]->(:Corso)
+#(:Corso)-[:TRATTA]->(:Argomento)
+#(:Argomento)-[:PREREQUISITO_DI]->(:Argomento)
+
+
+
+-- TIENE — Docente → Corso (almeno un corso per ogni docente)
+
+MATCH (c:Corso)
+WITH c.categoria AS categoria, collect(c) AS corsi
+MATCH (d:Docente {specializzazione: categoria})
+WITH categoria, corsi, collect(d) AS docenti
+UNWIND range(0, size(corsi)-1) AS idx
+WITH corsi[idx] AS corso, docenti[idx % size(docenti)] AS docente
+MERGE (docente)-[:TIENE {dal: date() - duration({days: toInteger(rand()*1000)})}]->(corso);
+Come funziona: per ogni categoria si raccolgono i corsi e i docenti corrispondenti. Scorrendo l'indice dei corsi (idx) e usando idx % size(docenti), il ciclo riparte da zero ogni volta che si esauriscono i docenti, garantendo che ciascuno venga assegnato almeno una volta se numero corsi ≥ numero docenti nella categoria (condizione sempre verificata con questa distribuzione: 40 corsi / 7 categorie ≥ 30 docenti / 7 categorie).
+
+
+-- ISCRITTO_A — Studente → Corso (almeno un corso per ogni studente)
+MATCH (s:Studente)
+WITH s, toInteger(1 + rand()*3) AS numCorsi
+MATCH (c:Corso)
+WITH s, numCorsi, c ORDER BY rand()
+WITH s, numCorsi, collect(c)[0..numCorsi] AS corsiScelti
+UNWIND corsiScelti AS c
+MERGE (s)-[:ISCRITTO_A {
+  data_iscrizione: date() - duration({days: toInteger(rand()*700)}),
+  stato: CASE toInteger(rand()*3)
+           WHEN 0 THEN "completato"
+           WHEN 1 THEN "in corso"
+           ELSE "abbandonato"
+         END
+}]->(c);
+
+
+-- TRATTA — Corso → Argomento 
+MATCH (c:Corso)
+WITH c, toInteger(2 + rand()*3) AS numArg
+MATCH (a:Argomento)
+WITH c, numArg, a ORDER BY rand()
+WITH c, numArg, collect(a)[0..numArg] AS argomentiScelti
+UNWIND argomentiScelti AS a
+MERGE (c)-[:TRATTA]->(a);
+
+
+-- PREREQUISITO_DI — Argomento → Argomento 
+UNWIND [
+  {da:"a5",  a:"a6"},
+  {da:"a6",  a:"a7"},
+  {da:"a1",  a:"a2"},
+  {da:"a3",  a:"a4"},
+  {da:"a10", a:"a11"},
+  {da:"a11", a:"a12"},
+  {da:"a12", a:"a13"},
+  {da:"a13", a:"a14"},
+  {da:"a15", a:"a16"},
+  {da:"a17", a:"a18"},
+  {da:"a19", a:"a21"},
+  {da:"a23", a:"a24"},
+  {da:"a24", a:"a25"},
+  {da:"a27", a:"a28"}
+] AS rel
+MATCH (a1:Argomento {id: rel.da}), (a2:Argomento {id: rel.a})
+MERGE (a1)-[:PREREQUISITO_DI]->(a2);
+
+-- OTTIENE + CERTIFICA — generazione dei Certificati dalle iscrizioni completate
+MATCH (s:Studente)-[r:ISCRITTO_A {stato:"completato"}]->(c:Corso)
+CREATE (cert:Certificato {
+  id: "cert-" + s.matricola + "-" + c.id,
+  data_rilascio: r.data_iscrizione + duration({days: 30 + toInteger(rand()*60)}),
+  punteggio: round((60 + rand()*40) * 10) / 10.0,
+  codice_verifica: "CERT-" + s.matricola + "-" + toUpper(c.id)
+})
+MERGE (s)-[:OTTIENE]->(cert)
+MERGE (cert)-[:CERTIFICA]->(c);

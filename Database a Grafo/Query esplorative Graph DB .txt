@@ -1,0 +1,174 @@
+QUERY DI ESPLORAZIONE PER PIATTAFORMA DI FORMAZIONE 
+Neo4j
+
+--------------------------------------------------------------------------
+1. CORSI COLLEGATI A UN ARGOMENTO (diretti o tramite prerequisiti)
+MATCH (target:Argomento {nome: "Query Cypher"})
+OPTIONAL MATCH (prereq:Argomento)-[:PREREQUISITO_DI*1..3]->(target)
+WITH target, collect(DISTINCT prereq) + target AS argomentiRilevanti
+UNWIND argomentiRilevanti AS a
+MATCH (c:Corso)-[:TRATTA]->(a)
+RETURN DISTINCT c.id AS corso_id, c.titolo AS titolo, c.categoria AS categoria,
+       c.livello AS livello, a.nome AS argomento_collegato
+ORDER BY c.categoria, c.titolo;
+
+
+--------------------------------------------------------------------------
+2. CORSI CONSIGLIATI PER UNO STUDENTE IN BASE AI CORSI CHE HA COMPLETATO 
+MATCH (s:Studente {matricola: "STU20230042"})-[:ISCRITTO_A {stato: "completato"}]->(:Corso)-[:TRATTA]->(a:Argomento)
+MATCH (a)-[:PREREQUISITO_DI]->(next:Argomento)<-[:TRATTA]-(consigliato:Corso)
+WHERE NOT (s)-[:ISCRITTO_A]->(consigliato)
+RETURN DISTINCT consigliato.id AS corso_id, consigliato.titolo AS titolo,
+       consigliato.categoria AS categoria, next.nome AS argomento_da_approfondire;
+
+
+--------------------------------------------------------------------------
+3. TASSO DI COMPLETSMENTO PER CATEGORIA DI CORSO
+MATCH (s:Studente)-[r:ISCRITTO_A]->(c:Corso)
+WITH c.categoria AS categoria, r.stato AS stato, count(*) AS totale
+WITH categoria,
+     sum(CASE WHEN stato = "completato" THEN totale ELSE 0 END) AS completati,
+     sum(totale) AS iscrizioni_totali
+RETURN categoria, completati, iscrizioni_totali,
+       round(100.0 * completati / iscrizioni_totali) AS percentuale_completamento
+ORDER BY percentuale_completamento DESC;
+
+
+--------------------------------------------------------------------------
+4. STUDENTI SIMILI PER ARGOMENTI/CORSI CONDIVISI
+CALL gds.graph.drop('studentiCorsi', false) YIELD graphName;
+
+CALL gds.graph.project(
+    'studentiCorsi',
+    ['Studente', 'Corso'],
+    { ISCRITTO_A: { orientation: 'UNDIRECTED' } }
+)
+YIELD graphName, nodeCount, relationshipCount;
+
+CALL gds.nodeSimilarity.stream('studentiCorsi')
+YIELD node1, node2, similarity
+WITH gds.util.asNode(node1) AS s1, gds.util.asNode(node2) AS s2, similarity
+WHERE s1:Studente AND s2:Studente AND s1.matricola < s2.matricola
+RETURN s1.matricola AS matricola_1, s1.nome AS nome_1,
+       s2.matricola AS matricola_2, s2.nome AS nome_2,
+       similarity
+ORDER BY similarity DESC
+LIMIT 20;
+
+CALL gds.graph.drop('studentiCorsi', false) YIELD graphName;
+
+
+--------------------------------------------------------------------------
+5. ARGOMENTI PIU' CENTRALI NELLA RETE DI PREREQUISITI
+CALL gds.graph.drop('grafoArgomenti', false) YIELD graphName;
+
+CALL gds.graph.project(
+    'grafoArgomenti',
+    'Argomento',
+    'PREREQUISITO_DI'
+)
+YIELD graphName, nodeCount, relationshipCount;
+
+CALL gds.pageRank.stream('grafoArgomenti')
+YIELD nodeId, score
+RETURN gds.util.asNode(nodeId).nome AS argomento, score
+ORDER BY score DESC
+LIMIT 10;
+
+CALL gds.graph.drop('grafoArgomenti', false) YIELD graphName;
+
+
+--------------------------------------------------------------------------
+6. COMUNITA' DI CORSI AFFINI PER ARGOMENTI CONDIVISI
+CALL gds.graph.drop('corsiArgomenti', false) YIELD graphName;
+
+CALL gds.graph.project(
+    'corsiArgomenti',
+    ['Corso', 'Argomento'],
+    { TRATTA: { orientation: 'UNDIRECTED' } }
+)
+YIELD graphName, nodeCount, relationshipCount;
+
+CALL gds.louvain.stream('corsiArgomenti')
+YIELD nodeId, communityId
+WITH gds.util.asNode(nodeId) AS n, communityId
+WHERE n:Corso
+RETURN communityId, collect(n.titolo) AS corsi_nella_comunita
+ORDER BY size(corsi_nella_comunita) DESC;
+
+CALL gds.graph.drop('corsiArgomenti', false) YIELD graphName;
+
+
+--------------------------------------------------------------------------
+7. DOCENTI CHE COPRONO UN DETERMINATO ARGOMENTO
+MATCH (d:Docente)-[:TIENE]->(c:Corso)-[:TRATTA]->(a:Argomento {nome: "Machine Learning Supervisionato"})
+RETURN DISTINCT d.nome, d.cognome, d.specializzazione, collect(c.titolo) AS corsi_correlati;
+
+--------------------------------------------------------------------------
+8. STUDENTI CON PIU' CERTIFICATI OTTENUTI
+MATCH (s:Studente)-[:OTTIENE]->(cert:Certificato)
+RETURN s.matricola, s.nome, s.cognome, count(cert) AS numero_certificati,
+       avg(cert.punteggio) AS media_punteggi
+ORDER BY numero_certificati DESC
+LIMIT 10;
+
+
+--------------------------------------------------------------------------
+9. PERCORSO DI APPRENDIMENTO COMPLETO PER UN ARGOMENTO
+MATCH path = (start:Argomento)-[:PREREQUISITO_DI*]->(end:Argomento {nome: "Reti Neurali"})
+WHERE NOT (:Argomento)-[:PREREQUISITO_DI]->(start)
+RETURN [n IN nodes(path) | n.nome] AS percorso_apprendimento
+ORDER BY length(path) DESC;
+
+
+--------------------------------------------------------------------------
+10. CORSI MAI COMPLETATI DA NESSUNO STUDENTE
+MATCH (c:Corso)
+WHERE NOT EXISTS {
+  MATCH (:Studente)-[:ISCRITTO_A {stato: "completato"}]->(c)
+}
+RETURN c.id, c.titolo, c.categoria, c.livello;
+
+
+--------------------------------------------------------------------------
+11. STUDENTI ISCRITTI NEGLI ULTIMI 6 MESI, COMPRESO IL NUMERO DI CORSI SEGUITI 
+MATCH (s:Studente)
+WHERE s.data_iscrizione >= date() - duration({months: 6})
+OPTIONAL MATCH (s)-[:ISCRITTO_A]->(c:Corso)
+RETURN s.matricola, s.nome, s.cognome, s.data_iscrizione, count(c) AS corsi_seguiti
+ORDER BY s.data_iscrizione DESC;
+
+
+--------------------------------------------------------------------------
+12. CONFRONTO TRA DOCENTI: NUEMRO DI CORSI TENTI E NUMERO DI STUDENTI TOTALI
+MATCH (d:Docente)-[:TIENE]->(c:Corso)
+OPTIONAL MATCH (s:Studente)-[:ISCRITTO_A]->(c)
+RETURN d.nome, d.cognome, d.specializzazione,
+       count(DISTINCT c) AS numero_corsi,
+       count(DISTINCT s) AS studenti_totali_raggiunti
+ORDER BY studenti_totali_raggiunti DESC
+LIMIT 15;
+
+
+--------------------------------------------------------------------------
+13. ARGOMENTI CHE RICHIEDONO PIÙ DI UN PREREQUISITO PER ESSERE AFFRONTATI
+MATCH (prereq:Argomento)-[:PREREQUISITO_DI]->(target:Argomento)
+WITH target, collect(prereq.nome) AS prerequisiti
+WHERE size(prerequisiti) > 1
+RETURN target.nome AS argomento, prerequisiti
+ORDER BY size(prerequisiti) DESC;
+
+
+--------------------------------------------------------------------------
+14. DISTRIBUZIONE DEI CORSI PER LIVELLO ALL'INTERNO DI CIASCUNA CATEGORIA
+MATCH (c:Corso)
+RETURN c.categoria AS categoria, c.livello AS livello, count(c) AS numero_corsi
+ORDER BY categoria, 
+  CASE c.livello WHEN "Base" THEN 1 WHEN "Intermedio" THEN 2 WHEN "Avanzato" THEN 3 END;
+
+
+--------------------------------------------------------------------------
+15. ARGOMENTI NON COLLEGATI DA NESSUNA RELAZIONE DI PREREQUISITO
+MATCH (a:Argomento)
+WHERE NOT (a)-[:PREREQUISITO_DI]-()
+RETURN a.id, a.nome AS argomento_isolato;
