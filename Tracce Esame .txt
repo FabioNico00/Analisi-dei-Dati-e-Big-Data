@@ -1,0 +1,23 @@
+-----------------------------------------------------------------
+Traccia relazionale: centro veterinario
+Un centro veterinario vuole informatizzare la gestione dei propri clienti, degli animali e delle visite mediche. Ogni cliente è identificato da un codice e per ciascuno si vogliono memorizzare nome, cognome, indirizzo, telefono ed email. Ogni cliente può possedere uno o più animali; di ogni animale si registrano nome, specie, razza, data di nascita e sesso. Nel centro operano più veterinari, ciascuno con codice, nome, cognome e specializzazione. Gli animali possono effettuare diverse visite nel tempo, e per ogni visita si vogliono memorizzare data, motivo della visita, diagnosi, costo ed eventuale terapia prescritta. Il sistema deve consentire di ricostruire lo storico clinico di ogni animale e di sapere quali veterinari hanno effettuato più visite.
+
+Query suggerite:
+Elencare tutte le visite effettuate da un determinato animale in ordine cronologico.
+Calcolare il numero di visite effettuate da ciascun veterinario.
+
+
+
+--------------------------------------------------------------------
+Traccia a grafo: rete di corsi online
+Una piattaforma di formazione vuole costruire un knowledge graph per rappresentare corsi, docenti, studenti, argomenti e certificati. Ogni corso ha titolo, livello, durata e categoria. I docenti possono tenere uno o più corsi, mentre gli studenti possono iscriversi a più corsi e ottenere certificati al completamento. Ogni corso tratta uno o più argomenti, e alcuni argomenti possono essere prerequisiti di altri. Gli studenti possono inoltre seguire percorsi formativi simili, perché hanno frequentato corsi con argomenti collegati. Il sistema deve consentire di esplorare relazioni tra corsi, individuare percorsi di apprendimento e trovare studenti o corsi connessi da interessi comuni.
+
+Query suggerite:
+Trovare tutti i corsi collegati a un certo argomento, direttamente o tramite prerequisiti.
+Individuare studenti simili perché hanno seguito corsi che condividono gli stessi argomenti.
+
+
+
+---------------------------------------------------------------------
+Traccia database non relazionale (scelta libera): Sentiment Analysis delle interazioni sui social media di un'azienda fittizia
+
