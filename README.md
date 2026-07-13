@@ -39,7 +39,7 @@ Le logiche procedurali avanzate intervengono prima della scrittura fisica dei da
 
 Una piattaforma di formazione online richiede uno strumento per mappare e navigare il proprio network didattico. L'esigenza non si concentra su entità isolate, ma sull'esplorazione profonda e ricorsiva delle connessioni tra studenti, docenti e contenuti, per far emergere percorsi di apprendimento personalizzati e vincoli di propedeuticità.
 
-### Perché usare un database a grafo
+### Struttura del database a grafo
 
 Nelle tabelle tradizionali (SQL), per trovare catene di collegamenti e percorsi formativi complessi servirebbero operazioni di incrocio molto pesanti che rallentano il sistema. Con Neo4j, i dati e le loro interconnessioni sono trattati allo stesso livello di importanza, collegando i nodi direttamente tramite relazioni esplicite.
 
